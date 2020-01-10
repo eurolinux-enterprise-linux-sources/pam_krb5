@@ -1,11 +1,16 @@
 Summary: A Pluggable Authentication Module for Kerberos 5
 Name: pam_krb5
 Version: 2.3.11
-Release: 6%{?dist}
+Release: 9%{?dist}
 Source0: https://fedorahosted.org/released/pam_krb5/pam_krb5-%{version}-1.tar.gz
 Patch0: pam_krb5-2.3.11-verify_ap_req_nofail.patch
 Patch1: pam_krb5-tests.patch
 Patch2: pam_krb5-2.3.11-cpw.patch
+Patch3: pam_krb5-2.3.11-authtok.patch
+Patch4: pam_krb5-2.3.11-credsession.patch
+Patch5: pam_krb5-2.3.11-externalsession.patch
+Patch6: pam_krb5-2.3.11-externalread.patch
+Patch7: pam_krb5-2.3.11-chpw-failprompt.patch
 License: BSD or LGPLv2+
 Group: System Environment/Base
 URL: https://fedorahosted.org/pam_krb5/
@@ -24,21 +29,30 @@ The included pam_krb5afs module also gets AFS tokens if so configured.
 %patch0 -p1 -b .verify_ap_req_nofail
 %patch1 -p1 -b .tests
 %patch2 -p1 -b .cpw
+%patch3 -p1 -b .authtok
+%patch4 -p1 -b .credsession
+%patch5 -p1 -b .externalsession
+%patch6 -p1 -b .externalread
+%patch7 -p1 -b .chpw-failprompt
 
-chmod +x tests/run-tests.sh
+chmod +x tests/run-tests.sh || :
 for e in tests/*/stdout.expected ; do
-	touch `dirname $e`/stderr.expected
+	touch `dirname $e`/stderr.expected || :
 done
-touch tests/010-options-moreaddrs/uses_addresses
-touch tests/{011-options-nov4,018-krb4}/uses_v4
-chmod +x tests/*/run.sh
-autoreconf -f -i
+touch tests/010-options-moreaddrs/uses_addresses || :
+touch tests/{011-options-nov4,018-krb4}/uses_v4 || :
+chmod +x tests/*/run.sh || :
+if test -z "%{?_rawbuild}" ; then
+	autoreconf -f -i
+fi
 
 %build
 CFLAGS="$RPM_OPT_FLAGS -fPIC"; export CFLAGS
 %configure --libdir=/%{_lib} \
-	--with-default-use-shmem=sshd --with-default-external=sshd \
-	--with-default-multiple-ccaches="su su-l"
+	--with-default-use-shmem=sshd \
+	--with-default-external="sshd sshd-rekey" \
+	--with-default-multiple-ccaches="su su-l" \
+	--with-default-no-cred-session="sshd"
 make
 
 %install
@@ -67,6 +81,25 @@ sed -ri -e 's|/lib(64)?/|/\$LIB/|g' $RPM_BUILD_ROOT/%{_mandir}/man*/pam_krb5*.8*
 %doc README README.*pkinit README.winbind COPYING* ChangeLog NEWS
 
 %changelog
+* Tue Nov  1 2011 Nalin Dahyabhai <nalin@redhat.com> - 2.3.11-9
+- refuse to supply non-password information via prompter callback when
+  obtaining password-changing credentials (#700520)
+
+* Fri Aug 12 2011 Nalin Dahyabhai <nalin@redhat.com> - 2.3.11-8
+- in a %%{_rawbuild} environment, don't run autoconf, because current
+  versions will choke on an unpatched configure.ac (more of #708507)
+
+* Fri Jul 29 2011 Nalin Dahyabhai <nalin@redhat.com> - 2.3.11-7
+- don't treat setcred() as session open/close in sshd (#720609, #725797)
+- don't create a new ccache when "external" is enabled, as the calling
+  application's already managing one (#690832)
+- always re-read "external" creds when possible, and use an in-memory
+  ccache when setting up tokens (more of #690832)
+- during password change, if we got creds during the first pass, don't
+  ask for the authtok again (#700520)
+- allow things we do to compensate for transplanting in new self-tests to
+  fail if the new tests aren't patched in (#708507)
+
 * Thu Mar 24 2011 Nalin Dahyabhai <nalin@redhat.com> - 2.3.11-6
 - backport the change to prefer krb5_change_password() over krb5_set_password()
   again from 2.3.12 (#690583)
