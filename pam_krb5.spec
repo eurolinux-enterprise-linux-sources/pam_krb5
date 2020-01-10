@@ -1,12 +1,16 @@
 Summary: A Pluggable Authentication Module for Kerberos 5
 Name: pam_krb5
 Version: 2.3.11
-Release: 1%{?dist}
+Release: 6%{?dist}
 Source0: https://fedorahosted.org/released/pam_krb5/pam_krb5-%{version}-1.tar.gz
+Patch0: pam_krb5-2.3.11-verify_ap_req_nofail.patch
+Patch1: pam_krb5-tests.patch
+Patch2: pam_krb5-2.3.11-cpw.patch
 License: BSD or LGPLv2+
 Group: System Environment/Base
 URL: https://fedorahosted.org/pam_krb5/
 BuildRequires: keyutils-libs-devel, krb5-devel >= 1.8, pam-devel
+BuildRequires: autoconf, automake, gettext-devel, libtool
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 %description 
@@ -17,6 +21,18 @@ The included pam_krb5afs module also gets AFS tokens if so configured.
 
 %prep
 %setup -q -n pam_krb5-%{version}-1
+%patch0 -p1 -b .verify_ap_req_nofail
+%patch1 -p1 -b .tests
+%patch2 -p1 -b .cpw
+
+chmod +x tests/run-tests.sh
+for e in tests/*/stdout.expected ; do
+	touch `dirname $e`/stderr.expected
+done
+touch tests/010-options-moreaddrs/uses_addresses
+touch tests/{011-options-nov4,018-krb4}/uses_v4
+chmod +x tests/*/run.sh
+autoreconf -f -i
 
 %build
 CFLAGS="$RPM_OPT_FLAGS -fPIC"; export CFLAGS
@@ -48,9 +64,28 @@ sed -ri -e 's|/lib(64)?/|/\$LIB/|g' $RPM_BUILD_ROOT/%{_mandir}/man*/pam_krb5*.8*
 %{_mandir}/man1/*
 %{_mandir}/man5/*
 %{_mandir}/man8/*
-%doc README* COPYING* ChangeLog NEWS
+%doc README README.*pkinit README.winbind COPYING* ChangeLog NEWS
 
 %changelog
+* Thu Mar 24 2011 Nalin Dahyabhai <nalin@redhat.com> - 2.3.11-6
+- backport the change to prefer krb5_change_password() over krb5_set_password()
+  again from 2.3.12 (#690583)
+
+* Thu Mar  3 2011 Nalin Dahyabhai <nalin@redhat.com> - 2.3.11-5
+- backport self-tests from git master (#638586)
+
+* Wed Feb  2 2011 Nalin Dahyabhai <nalin@redhat.com> - 2.3.11-4
+- backport some self-tests from git master (#638586)
+
+* Mon Jan 31 2011 Nalin Dahyabhai <nalin@redhat.com> - 2.3.11-3
+- don't include patch backup versions of README files (internal tooling)
+
+* Fri Jan 28 2011 Nalin Dahyabhai <nalin@redhat.com> - 2.3.11-2
+- backport fixes to make the libdefaults verify_ap_req_nofail setting control
+  what happens when we can't read keytabs, and enable TGT validation by
+  default, with "novalidate" as an option which takes a list of services for
+  which TGT validation shouldn't be attempted (#622938)
+
 * Mon Mar  8 2010 Nalin Dahyabhai <nalin@redhat.com> - 2.3.11-1
 - create creds before calling krb5_kuserok() so that they're available when
   it goes to look up the target user's home directory (#563442)
