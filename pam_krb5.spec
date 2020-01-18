@@ -7,7 +7,7 @@
 Summary: A Pluggable Authentication Module for Kerberos 5
 Name: pam_krb5
 Version: 2.4.8
-Release: 4%{?dist}
+Release: 6%{?dist}
 Source0: https://fedorahosted.org/released/pam_krb5/pam_krb5-%{version}.tar.gz
 Source1: https://fedorahosted.org/released/pam_krb5/pam_krb5-%{version}.tar.gz.sig
 License: BSD or LGPLv2+
@@ -15,6 +15,8 @@ Group: System Environment/Base
 URL: https://fedorahosted.org/pam_krb5/
 BuildRequires: keyutils-libs-devel, krb5-devel, pam-devel, libselinux-devel
 Patch0: no_subsequent_on_chauthtok.patch
+Patch1: pam_krb5-no_close_fork-without-exec.patch
+Patch2: pam_krb5-2.4.10-ignore_afs_options.patch
 # Needed by tests.
 # BuildRequires: krb5-server, krb5-workstation
 
@@ -26,6 +28,8 @@ using Kerberos 5, and to change user passwords.
 %prep
 %setup -q
 %patch0 -p1 -b .no_subsequent_on_chauthtok
+%patch1 -p1 -b .no_close_fork-without-exec
+%patch2 -p1 -b .ignore_afs_options
 
 %build
 configure_flags=
@@ -69,6 +73,14 @@ sed -ri -e 's|/lib(64)?/|/\$LIB/|g' $RPM_BUILD_ROOT/%{_mandir}/man*/pam_krb5*.8*
 %{_mandir}/man8/*
 
 %changelog
+* Fri Feb 19 2016 Robbie Harwood <rharwood@redhat.com> - 2.4.8-5
+- Add pam_krb5(8) documentation for ignore_afs
+- Resolves: #1147552
+
+* Mon Feb 15 2016 Robbie Harwood <rharwood@redhat.com> - 2.4.8-5
+- Fix use of kerberized sudo with smartcard
+- Resolves: #1263745
+
 * Thu Mar  6 2014 Nalin Dahyabhai <nalin@redhat.com> - 2.4.8-4
 - fix to only prompt for passwords when obtaining credentials for performing
   password changes by toggling the subsequent_prompt default to off when
