@@ -1,0 +1,175 @@
+diff --git a/src/acct.c b/src/acct.c
+index 0dce4f9..f87001b 100644
+--- a/src/acct.c
++++ b/src/acct.c
+@@ -83,7 +83,8 @@ pam_sm_acct_mgmt(pam_handle_t *pamh, int flags,
+ 	}
+ 
+ 	/* Read our options. */
+-	options = _pam_krb5_options_init(pamh, argc, argv, ctx);
++	options = _pam_krb5_options_init(pamh, argc, argv, ctx,
++					 _pam_krb5_option_role_general);
+ 	if (options == NULL) {
+ 		warn("error parsing options (shouldn't happen)");
+ 		_pam_krb5_free_ctx(ctx);
+diff --git a/src/auth.c b/src/auth.c
+index c0257cf..eb93dc1 100644
+--- a/src/auth.c
++++ b/src/auth.c
+@@ -100,7 +100,8 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags,
+ 		_pam_krb5_free_ctx(ctx);
+ 		return PAM_SERVICE_ERR;
+ 	}
+-	options = _pam_krb5_options_init(pamh, argc, argv, ctx);
++	options = _pam_krb5_options_init(pamh, argc, argv, ctx,
++					 _pam_krb5_option_role_general);
+ 	if (options == NULL) {
+ 		warn("error parsing options (shouldn't happen)");
+ 		v5_free_get_init_creds_opt(ctx, gic_options);
+diff --git a/src/options.c b/src/options.c
+index 05539dc..60f5438 100644
+--- a/src/options.c
++++ b/src/options.c
+@@ -321,7 +321,8 @@ free_l(char **l)
+ struct _pam_krb5_options *
+ _pam_krb5_options_init(pam_handle_t *pamh, int argc,
+ 		       PAM_KRB5_MAYBE_CONST char **argv,
+-		       krb5_context ctx)
++		       krb5_context ctx,
++		       enum _pam_krb5_option_role role)
+ {
+ 	struct _pam_krb5_options *options;
+ 	int try_first_pass, use_first_pass, initial_prompt, subsequent_prompt;
+@@ -622,7 +623,7 @@ _pam_krb5_options_init(pam_handle_t *pamh, int argc,
+ 	/* private option */
+ 	options->use_first_pass = 1;
+ 	options->use_second_pass = 1;
+-	options->use_third_pass = 1;
++	options->use_third_pass = (role != _pam_krb5_option_role_chauthtok);
+ 	options->permit_password_callback = 0;
+ 	use_first_pass = option_b(argc, argv,
+ 				  ctx, options->realm,
+diff --git a/src/options.h b/src/options.h
+index 42ab7ee..c01376f 100644
+--- a/src/options.h
++++ b/src/options.h
+@@ -106,10 +106,16 @@ struct _pam_krb5_options {
+ 	int n_mappings;
+ };
+ 
++enum _pam_krb5_option_role {
++	_pam_krb5_option_role_general,
++	_pam_krb5_option_role_chauthtok,
++};
++
+ struct _pam_krb5_options *_pam_krb5_options_init(pam_handle_t *pamh,
+ 						 int argc,
+ 						 PAM_KRB5_MAYBE_CONST char **argv,
+-						 krb5_context ctx);
++						 krb5_context ctx,
++						 enum _pam_krb5_option_role role);
+ void _pam_krb5_options_free(pam_handle_t *pamh,
+ 			    krb5_context ctx,
+ 			    struct _pam_krb5_options *options);
+diff --git a/src/pam_krb5.5.in b/src/pam_krb5.5.in
+index ef07b96..144d446 100644
+--- a/src/pam_krb5.5.in
++++ b/src/pam_krb5.5.in
+@@ -220,7 +220,8 @@ controls whether or not pam_krb5.so will allow the Kerberos library to ask
+ the user for a password or other information, if the previously-entered
+ password is somehow insufficient for authenticating the user.  This is
+ commonly needed to allow a user to log in when that user's password has
+-expired.  The default is \fBtrue\fR.
++expired.  The default is \fBfalse\fR during password changes, and
++\fBtrue\fR otherwise.
+ 
+ If the calling application does not properly support PAM conversations
+ (possibly due to limitations of a network protocol which it is serving),
+diff --git a/src/pam_krb5_cchelper.c b/src/pam_krb5_cchelper.c
+index faea620..98e4f73 100644
+--- a/src/pam_krb5_cchelper.c
++++ b/src/pam_krb5_cchelper.c
+@@ -201,9 +201,16 @@ main(int argc, const char **argv)
+ 
+ 	/* We'll need a writable string for use as the template. */
+ 	ccname = xstrdup(argv[2]);
+-	if ((ccname == NULL) || (strchr(ccname, ':') == NULL)) {
++	if (ccname == NULL) {
+ 		return 4;
+ 	}
++	if (strchr(ccname, ':') == NULL) {
++		p = malloc(strlen(ccname) + 6);
++		if (p != NULL) {
++			snprintf(p, strlen(ccname) + 6, "FILE:%s", ccname);
++			ccname = p;
++		}
++	}
+ 	workccname = NULL;
+ 
+ 	/* Parse the UID, if given. */
+diff --git a/src/pam_newpag.c b/src/pam_newpag.c
+index ff03b20..374cd3c 100644
+--- a/src/pam_newpag.c
++++ b/src/pam_newpag.c
+@@ -76,7 +76,8 @@ maybe_setpag(const char *fn, pam_handle_t *pamh, int flags,
+ 	}
+ 
+ 	/* Read our options. */
+-	options = _pam_krb5_options_init(pamh, argc, argv, ctx);
++	options = _pam_krb5_options_init(pamh, argc, argv, ctx,
++					 _pam_krb5_option_role_general);
+ 	if (options == NULL) {
+ 		warn("error parsing options (shouldn't happen)");
+ 		_pam_krb5_free_ctx(ctx);
+diff --git a/src/password.c b/src/password.c
+index 75b7817..11c9719 100644
+--- a/src/password.c
++++ b/src/password.c
+@@ -103,7 +103,8 @@ pam_sm_chauthtok(pam_handle_t *pamh, int flags,
+ 		_pam_krb5_free_ctx(ctx);
+ 		return PAM_SERVICE_ERR;
+ 	}
+-	options = _pam_krb5_options_init(pamh, argc, argv, ctx);
++	options = _pam_krb5_options_init(pamh, argc, argv, ctx,
++					 _pam_krb5_option_role_chauthtok);
+ 	if (options == NULL) {
+ 		warn("error parsing options (shouldn't happen)");
+ 		v5_free_get_init_creds_opt(ctx, gic_options);
+diff --git a/src/session.c b/src/session.c
+index 2c2ef2e..206d44b 100644
+--- a/src/session.c
++++ b/src/session.c
+@@ -91,7 +91,8 @@ _pam_krb5_open_session(pam_handle_t *pamh, int flags,
+ 	}
+ 
+ 	/* Read our options. */
+-	options = _pam_krb5_options_init(pamh, argc, argv, ctx);
++	options = _pam_krb5_options_init(pamh, argc, argv, ctx,
++					 _pam_krb5_option_role_general);
+ 	if (options == NULL) {
+ 		warn("error parsing options (shouldn't happen)");
+ 		_pam_krb5_free_ctx(ctx);
+@@ -288,7 +289,8 @@ _pam_krb5_close_session(pam_handle_t *pamh, int flags,
+ 	}
+ 
+ 	/* Read our options. */
+-	options = _pam_krb5_options_init(pamh, argc, argv, ctx);
++	options = _pam_krb5_options_init(pamh, argc, argv, ctx,
++					 _pam_krb5_option_role_general);
+ 	if (options == NULL) {
+ 		_pam_krb5_free_ctx(ctx);
+ 		return PAM_SERVICE_ERR;
+diff --git a/src/sly.c b/src/sly.c
+index 97835c9..bb398eb 100644
+--- a/src/sly.c
++++ b/src/sly.c
+@@ -147,7 +147,8 @@ _pam_krb5_sly_maybe_refresh(pam_handle_t *pamh, int flags, const char *why,
+ 	}
+ 
+ 	/* Read our options. */
+-	options = _pam_krb5_options_init(pamh, argc, argv, ctx);
++	options = _pam_krb5_options_init(pamh, argc, argv, ctx,
++					 _pam_krb5_option_role_general);
+ 	if (options == NULL) {
+ 		warn("error parsing options (shouldn't happen)");
+ 		_pam_krb5_free_ctx(ctx);

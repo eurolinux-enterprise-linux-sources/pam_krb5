@@ -7,13 +7,14 @@
 Summary: A Pluggable Authentication Module for Kerberos 5
 Name: pam_krb5
 Version: 2.4.8
-Release: 1%{?dist}
+Release: 4%{?dist}
 Source0: https://fedorahosted.org/released/pam_krb5/pam_krb5-%{version}.tar.gz
 Source1: https://fedorahosted.org/released/pam_krb5/pam_krb5-%{version}.tar.gz.sig
 License: BSD or LGPLv2+
 Group: System Environment/Base
 URL: https://fedorahosted.org/pam_krb5/
 BuildRequires: keyutils-libs-devel, krb5-devel, pam-devel, libselinux-devel
+Patch0: no_subsequent_on_chauthtok.patch
 # Needed by tests.
 # BuildRequires: krb5-server, krb5-workstation
 
@@ -24,6 +25,7 @@ using Kerberos 5, and to change user passwords.
 
 %prep
 %setup -q
+%patch0 -p1 -b .no_subsequent_on_chauthtok
 
 %build
 configure_flags=
@@ -67,6 +69,17 @@ sed -ri -e 's|/lib(64)?/|/\$LIB/|g' $RPM_BUILD_ROOT/%{_mandir}/man*/pam_krb5*.8*
 %{_mandir}/man8/*
 
 %changelog
+* Thu Mar  6 2014 Nalin Dahyabhai <nalin@redhat.com> - 2.4.8-4
+- fix to only prompt for passwords when obtaining credentials for performing
+  password changes by toggling the subsequent_prompt default to off when
+  called to perform a password change (#1063933)
+
+* Fri Jan 24 2014 Daniel Mach <dmach@redhat.com> - 2.4.8-3
+- Mass rebuild 2014-01-24
+
+* Fri Dec 27 2013 Daniel Mach <dmach@redhat.com> - 2.4.8-2
+- Mass rebuild 2013-12-27
+
 * Fri Oct  4 2013 Nalin Dahyabhai <nalin@redhat.com> - 2.4.8-1
 - properly handle cases where default_ccache_name isn't set (#1015479)
 
